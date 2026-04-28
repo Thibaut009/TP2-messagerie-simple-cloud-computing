@@ -7,6 +7,8 @@ interface UseConversationsReturn {
   loading: boolean
   error: string | null
   createConversation: (recipientEmail: string) => Promise<{ id: string | null; error: string | null }>
+  addParticipant: (convId: string, email: string) => Promise<{ error: string | null }>
+  updateConversationName: (convId: string, name: string) => Promise<{ error: string | null }>
   refresh: () => Promise<void>
 }
 
@@ -42,10 +44,8 @@ export function useConversations(userId: string | undefined): UseConversationsRe
         .order('updated_at', { ascending: false })
 
       if (fetchError) {
-        console.error('[useConversations] fetchError:', fetchError)
         setError(fetchError.message)
       } else {
-        console.log('[useConversations] conversations fetched:', data)
         setConversations((data as ConversationWithParticipants[]) ?? [])
       }
     } catch {
@@ -135,11 +135,79 @@ export function useConversations(userId: string | undefined): UseConversationsRe
       return { id: null, error: convError?.message ?? 'Erreur lors de la création' }
     }
 
-    const newConv = { id: newConvId as string }
-
     await fetchConversations()
-    return { id: newConv.id, error: null }
+    return { id: newConvId as string, error: null }
   }, [userId, fetchConversations])
 
-  return { conversations, loading, error, createConversation, refresh: fetchConversations }
+  const addParticipant = useCallback(async (
+    convId: string,
+    email: string
+  ): Promise<{ error: string | null }> => {
+    if (!userId) return { error: 'Non connecté' }
+
+    // Trouver l'utilisateur par email
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, display_name, email')
+      .eq('email', email.trim().toLowerCase())
+      .single()
+
+    if (profileError || !profile) return { error: 'Aucun utilisateur trouvé avec cet email' }
+    if (profile.id === userId) return { error: 'Vous êtes déjà dans la conversation' }
+
+    // Ajouter le participant via la fonction sécurisée
+    const { error: addError } = await supabase.rpc('add_participant', {
+      conv_id: convId,
+      new_user_id: profile.id,
+    })
+
+    if (addError) return { error: addError.message }
+
+    // Récupérer tous les participants pour générer le nom de groupe
+    const { data: participants } = await supabase
+      .from('conversation_participants')
+      .select('profiles(display_name, email)')
+      .eq('conversation_id', convId)
+
+    if (participants && participants.length > 2) {
+      const groupName = participants
+        .map((p: any) => p.profiles?.display_name ?? p.profiles?.email ?? '')
+        .filter(Boolean)
+        .join(', ')
+
+      await supabase
+        .from('conversations')
+        .update({ name: groupName, is_group: true })
+        .eq('id', convId)
+    }
+
+    await fetchConversations()
+    return { error: null }
+  }, [userId, fetchConversations])
+
+  const updateConversationName = useCallback(async (
+    convId: string,
+    name: string
+  ): Promise<{ error: string | null }> => {
+    const trimmed = name.trim()
+    const { error } = await supabase
+      .from('conversations')
+      .update({ name: trimmed || null })
+      .eq('id', convId)
+
+    if (error) return { error: error.message }
+
+    await fetchConversations()
+    return { error: null }
+  }, [fetchConversations])
+
+  return {
+    conversations,
+    loading,
+    error,
+    createConversation,
+    addParticipant,
+    updateConversationName,
+    refresh: fetchConversations,
+  }
 }

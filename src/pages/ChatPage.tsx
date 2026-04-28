@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { ConversationList } from '../components/chat/ConversationList'
 import { MessageList } from '../components/chat/MessageList'
 import { MessageInput } from '../components/chat/MessageInput'
 import { NewConversationModal } from '../components/chat/NewConversationModal'
+import { AddParticipantModal } from '../components/chat/AddParticipantModal'
 import { useConversations } from '../hooks/useConversations'
 import { useMessages } from '../hooks/useMessages'
 import type { Profile } from '../types'
@@ -18,12 +19,47 @@ export function ChatPage({ session, profile, onSignOut }: ChatPageProps) {
   const userId = session.user.id
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [showNewChat, setShowNewChat] = useState(false)
+  const [showAddParticipant, setShowAddParticipant] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
-  const { conversations, loading: convsLoading, createConversation } = useConversations(userId)
+  const { conversations, loading: convsLoading, createConversation, addParticipant, updateConversationName } = useConversations(userId)
   const { messages, loading: msgsLoading, sendMessage } = useMessages(selectedConvId, userId)
 
   const selectedConv = conversations.find((c) => c.id === selectedConvId)
+
+  // Focus l'input quand on passe en mode édition
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus()
+      nameInputRef.current.select()
+    }
+  }, [editingName])
+
+  // Quitter le mode édition si on change de conversation
+  useEffect(() => {
+    setEditingName(false)
+  }, [selectedConvId])
+
+  const handleStartEditName = () => {
+    setNameInput(convTitle ?? '')
+    setEditingName(true)
+  }
+
+  const handleSaveName = async () => {
+    if (!selectedConvId) return
+    setEditingName(false)
+    if (nameInput.trim() !== (convTitle ?? '')) {
+      await updateConversationName(selectedConvId, nameInput)
+    }
+  }
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSaveName()
+    if (e.key === 'Escape') setEditingName(false)
+  }
 
   const convTitle = selectedConv
     ? selectedConv.is_group
@@ -74,14 +110,49 @@ export function ChatPage({ session, profile, onSignOut }: ChatPageProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <div>
-                <h2 className="text-white font-semibold text-sm">{convTitle}</h2>
+
+              <div className="flex-1 min-w-0">
+                {editingName ? (
+                  <input
+                    ref={nameInputRef}
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onBlur={handleSaveName}
+                    onKeyDown={handleNameKeyDown}
+                    className="w-full bg-gray-700 border border-blue-500 rounded-lg px-2 py-1 text-white text-sm font-semibold focus:outline-none"
+                  />
+                ) : (
+                  <div className="flex items-center gap-1.5 group">
+                    <h2 className="text-white font-semibold text-sm truncate">{convTitle}</h2>
+                    <button
+                      onClick={handleStartEditName}
+                      title="Modifier le nom"
+                      className="p-1 rounded text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <p className="text-gray-400 text-xs">
                   {selectedConv.conversation_participants?.length ?? 0} participant(s)
                   {' · '}
                   <span className="text-green-400">● Temps réel activé</span>
                 </p>
               </div>
+
+              <button
+                onClick={() => setShowAddParticipant(true)}
+                title="Ajouter un participant"
+                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition flex-shrink-0"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+              </button>
             </header>
 
             <MessageList messages={messages} loading={msgsLoading} currentUserId={userId} />
@@ -130,6 +201,13 @@ export function ChatPage({ session, profile, onSignOut }: ChatPageProps) {
           onClose={() => setShowNewChat(false)}
           onCreate={createConversation}
           onCreated={(id) => { setSelectedConvId(id); setMobileSidebarOpen(false) }}
+        />
+      )}
+
+      {showAddParticipant && selectedConvId && (
+        <AddParticipantModal
+          onClose={() => setShowAddParticipant(false)}
+          onAdd={(email) => addParticipant(selectedConvId, email)}
         />
       )}
     </div>
