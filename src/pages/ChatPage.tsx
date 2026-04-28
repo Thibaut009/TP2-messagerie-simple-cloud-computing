@@ -26,14 +26,16 @@ export function ChatPage({ session, profile, onSignOut }: ChatPageProps) {
   const selectedConv = conversations.find((c) => c.id === selectedConvId)
 
   const convTitle = selectedConv
-    ? (selectedConv.name ??
-        selectedConv.conversation_participants
-          ?.find((p) => p.user_id !== userId)
-          ?.profiles?.display_name ??
-        selectedConv.conversation_participants
-          ?.find((p) => p.user_id !== userId)
-          ?.profiles?.email ??
-        'Conversation')
+    ? selectedConv.is_group
+      ? (selectedConv.name ?? 'Groupe')
+      : (selectedConv.conversation_participants
+            ?.find((p) => p.user_id !== userId)
+            ?.profiles?.display_name ??
+          selectedConv.conversation_participants
+            ?.find((p) => p.user_id !== userId)
+            ?.profiles?.email ??
+          selectedConv.name ??
+          'Conversation')
     : null
 
   return (

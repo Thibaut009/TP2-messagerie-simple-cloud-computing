@@ -12,9 +12,11 @@ interface ConversationListProps {
 }
 
 function getConversationLabel(conv: ConversationWithParticipants, currentUserId: string): string {
-  if (conv.name) return conv.name
-  const other = conv.conversation_participants?.find((p) => p.user_id !== currentUserId)
-  return other?.profiles?.display_name ?? other?.profiles?.email ?? 'Conversation'
+  if (!conv.is_group) {
+    const other = conv.conversation_participants?.find((p) => p.user_id !== currentUserId)
+    return other?.profiles?.display_name ?? other?.profiles?.email ?? conv.name ?? 'Conversation'
+  }
+  return conv.name ?? 'Groupe'
 }
 
 function getInitials(label: string): string {

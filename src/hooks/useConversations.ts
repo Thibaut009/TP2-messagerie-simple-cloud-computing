@@ -128,7 +128,7 @@ export function useConversations(userId: string | undefined): UseConversationsRe
     const { data: newConvId, error: convError } = await supabase
       .rpc('create_conversation', {
         recipient_id: recipientProfile.id,
-        conv_name: recipientProfile.display_name ?? recipientProfile.email,
+        conv_name: null,
       })
 
     if (convError || !newConvId) {
